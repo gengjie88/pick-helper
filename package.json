@@ -1,6 +1,6 @@
 {
   "name": "pick-helper",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "英雄联盟客户端辅助工具 - 自动接受对局 + 大乱斗自动选英雄",
   "main": "main.js",
   "scripts": {
@@ -10,9 +10,8 @@
     "bump": "npm version patch --no-git-tag-version",
     "bump:minor": "npm version minor --no-git-tag-version",
     "bump:major": "npm version major --no-git-tag-version",
-    "predist": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true,maxRetries:5,retryDelay:500})}catch(e){}\"",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "pack": "electron-forge package",
+    "dist": "electron-forge make"
   },
   "keywords": [
     "lol",
@@ -23,25 +22,10 @@
   "author": "PickHelper",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.8.0"
-  },
-  "build": {
-    "appId": "com.pickhelper.app",
-    "productName": "PickHelper",
-    "files": [
-      "**/*"
-    ],
-    "directories": {
-      "buildResources": "assets"
-    },
-    "win": {
-      "icon": "assets/icon.png"
-    },
-    "nsis": {
-      "installerIcon": "assets/icon.png",
-      "uninstallerIcon": "assets/icon.png"
-    }
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "electron": "^28.0.0"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
