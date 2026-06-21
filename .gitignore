@@ -1,0 +1,10 @@
+dist/
+node_modules/
+
+# Optional: ignore local VS Code settings
+.vscode/
+
+# Optional: OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

@@ -1,0 +1,38 @@
+{
+  "name": "pick-helper",
+  "version": "1.0.0",
+  "description": "英雄联盟客户端辅助工具 - 自动接受对局 + 大乱斗自动选英雄",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "lol",
+    "league of legends",
+    "aram",
+    "helper"
+  ],
+  "author": "PickHelper",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.8.0"
+  },
+  "build": {
+    "appId": "com.pickhelper.app",
+    "productName": "PickHelper",
+    "files": [
+      "**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    }
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "iconv-lite": "^0.7.2"
+  }
+}

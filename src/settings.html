@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>设置 - PickHelper</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 标题栏 -->
+  <div class="titlebar">
+    <button class="back-btn" id="backBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      返回
+    </button>
+    <div class="titlebar-actions">
+      <button class="titlebar-btn" id="minimizeBtn" title="最小化">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+      <button class="titlebar-btn close" id="closeBtn" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 主内容区 -->
+  <div class="content">
+    <!-- 功能设置 -->
+    <div class="settings-section">
+      <div class="settings-section-title">功能设置</div>
+      
+      <div class="setting-item">
+        <div>
+          <div class="setting-label">自动接受对局</div>
+          <div class="setting-desc">匹配成功后自动点击接受</div>
+        </div>
+        <div class="toggle active" id="autoAcceptToggle"></div>
+      </div>
+      
+      <div class="setting-item">
+        <div>
+          <div class="setting-label">大乱斗自动选英雄</div>
+          <div class="setting-desc">根据优先级自动交换备选池英雄</div>
+        </div>
+        <div class="toggle active" id="aramPickToggle"></div>
+      </div>
+    </div>
+
+    <!-- 英雄优先级配置 -->
+    <div class="settings-section">
+      <div class="settings-section-title">英雄优先级配置</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <select id="presetManageSelect" style="padding:6px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;"></select>
+        <input id="presetNameInput" placeholder="预设名称" style="padding:6px;border-radius:6px;border:1px solid #e2e8f0;flex:1;">
+        <button class="refresh-btn" id="addPresetBtn">新建</button>
+        <button class="refresh-btn" id="savePresetBtn">保存</button>
+        <button class="refresh-btn" id="delPresetBtn">删除</button>
+      </div>
+      <div class="search-box">
+        <div class="search-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+        <input type="text" class="search-input" id="heroSearch" placeholder="搜索英雄添加到优先级列表">
+        <div class="hero-dropdown" id="heroDropdown"></div>
+      </div>
+
+      <div class="selected-heroes" id="selectedHeroes">
+        <div class="empty-state" style="padding:20px;">暂无英雄</div>
+      </div>
+    </div>
+
+    <!-- 英雄数据 -->
+    <div class="settings-section">
+      <div class="settings-section-title">英雄数据</div>
+      
+      <div class="setting-item">
+        <div>
+          <div class="setting-label">数据版本</div>
+          <div class="setting-desc" id="dataVersion">加载中...</div>
+        </div>
+        <button class="refresh-btn" id="refreshBtn">刷新</button>
+      </div>
+    </div>
+
+    <!-- 运行日志 -->
+    <div class="settings-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="settings-section-title" style="margin:0;">运行日志</div>
+        <!-- <button class="refresh-btn" id="debugBtn" title="打开调试日志">调试</button> -->
+      </div>
+      <div class="log-container" id="logContainer">
+        <div class="log-item info">
+          <span class="log-time">--:--:--</span>
+          <span class="log-msg">等待日志...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文本日志弹窗（隐藏） -->
+    <div id="textLogModal" style="display:none;position:fixed;inset:60px 40px 40px 40px;background:#ffffff;border-radius:8px;box-shadow:0 8px 24px rgba(2,6,23,0.2);z-index:200;padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-weight:600;color:#1e293b;">文本日志</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="refresh-btn" id="copyLogBtn">复制</button>
+          <button class="refresh-btn" id="closeTextLogBtn">关闭</button>
+        </div>
+      </div>
+      <textarea id="textLogArea" style="width:100%;height:calc(100% - 48px);resize:none;padding:8px;font-family:Consolas,monospace;font-size:12px;" readonly></textarea>
+    </div>
+  </div>
+
+  <script src="js/settings.js"></script>
+</body>
+</html>
