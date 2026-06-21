@@ -1,11 +1,15 @@
 {
   "name": "pick-helper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "英雄联盟客户端辅助工具 - 自动接受对局 + 大乱斗自动选英雄",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "icon": "electron scripts/generate-icon.js",
+    "bump": "npm version patch --no-git-tag-version",
+    "bump:minor": "npm version minor --no-git-tag-version",
+    "bump:major": "npm version major --no-git-tag-version",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -29,6 +33,13 @@
     ],
     "directories": {
       "buildResources": "assets"
+    },
+    "win": {
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "installerIcon": "assets/icon.png",
+      "uninstallerIcon": "assets/icon.png"
     }
   },
   "dependencies": {
