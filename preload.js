@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('pick:update', (_, data) => callback(data));
   },
 
+  // 手动交换英雄（从备选池点击）
+  manualSwap: (heroId) => ipcRenderer.invoke('app:manual-swap', heroId),
+
+  // 设置自动选英雄开关状态
+  setAutoPickEnabled: (enabled) => ipcRenderer.invoke('app:set-auto-pick', enabled),
+
+  // 监听自动选择开关变化
+  onAutoPickChanged: (callback) => {
+    ipcRenderer.on('auto-pick:changed', (_, enabled) => callback(enabled));
+  },
+
   // 窗口控制
   minimize: () => ipcRenderer.invoke('window:minimize'),
   close: () => ipcRenderer.invoke('window:close')

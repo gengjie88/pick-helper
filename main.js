@@ -756,6 +756,47 @@ ipcMain.handle('app:refresh-champions', async () => {
   };
 });
 
+// 手动交换英雄：渲染进程点击备选池卡片触发
+ipcMain.handle('app:manual-swap', async (_, heroId) => {
+  if (!lcuAuth || !heroId) return { success: false, error: '未连接或参数无效' };
+
+  // ★ 先保存关闭状态，防止 await 期间 mainLoop 再次触发自动交换
+  const s = store.get('settings');
+  s.aramPick = false;
+  store.set('settings', s);
+  addLog('[设置] 手动选择后已关闭自动选英雄', 'info');
+
+  // 同步开关状态到渲染进程
+  if (mainWindow) {
+    mainWindow.webContents.send('auto-pick:changed', false);
+  }
+
+  // 再执行交换（此时自动选择已关闭，mainLoop 不会干扰）
+  const swapResult = await lcuRequest(
+    `/lol-champ-select/v1/session/bench/swap/${heroId}`,
+    'POST'
+  );
+
+  if (swapResult) {
+    const champData = store.get('championData.champions');
+    const champName = (champData[heroId] && champData[heroId].name) || heroId;
+    addLog(`[手动] 交换英雄: ${champName}`, 'success');
+    return { success: true };
+  } else {
+    addLog('[手动] 交换请求失败', 'error');
+    return { success: false, error: '交换请求失败' };
+  }
+});
+
+// 设置自动选英雄开关
+ipcMain.handle('app:set-auto-pick', (_, enabled) => {
+  const s = store.get('settings');
+  s.aramPick = !!enabled;
+  store.set('settings', s);
+  addLog(`[设置] 自动选英雄已${enabled ? '开启' : '关闭'}`, 'info');
+  return true;
+});
+
 ipcMain.handle('window:minimize', () => {
   mainWindow?.minimize();
 });

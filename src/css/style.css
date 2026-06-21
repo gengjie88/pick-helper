@@ -359,6 +359,22 @@ body {
   border-color: #cbd5e1;
 }
 
+.bench-card.clickable {
+  cursor: pointer;
+}
+
+.bench-card.clickable:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.bench-card.clickable:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 .bench-card.priority {
   border-color: #fbbf24;
   background: #fffbeb;
@@ -415,43 +431,72 @@ body {
 .current-hold {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, #eff6ff, #dbeafe);
-  border-radius: 10px;
-  border: 1px solid #bfdbfe;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #ede9fe 100%);
+  border-radius: 14px;
+  border: 2px solid #93c5fd;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.current-hold::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+  animation: hold-glow 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes hold-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
 }
 
 .hold-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .hold-champion {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
 }
 
 .hold-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   object-fit: cover;
   background: #e2e8f0;
+  border: 2px solid #60a5fa;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
 }
 
 .hold-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   color: #1e293b;
+  letter-spacing: -0.3px;
 }
 
 .hold-rank {
-  font-size: 11px;
-  color: #3b82f6;
-  font-weight: 500;
+  font-size: 13px;
+  color: #2563eb;
+  font-weight: 600;
+  background: #dbeafe;
+  padding: 3px 10px;
+  border-radius: 12px;
 }
 
 /* ===== 下栏面板 ===== */

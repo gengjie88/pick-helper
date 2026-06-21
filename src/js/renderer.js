@@ -144,6 +144,8 @@ function updatePickDashboard(data) {
   // 备选池
   if (benchChampions && benchChampions.length > 0) {
     benchGrid.innerHTML = '';
+    const isAutoEnabled = isSwitchActive(aramPickBtn);
+
     benchChampions.forEach(champ => {
       const card = document.createElement('div');
       card.className = 'bench-card';
@@ -153,6 +155,15 @@ function updatePickDashboard(data) {
         if (champ.priorityIndex === 0) {
           card.classList.add('top-priority');
         }
+      }
+
+      // 手动选择：仅自动模式开启时可点击
+      if (isAutoEnabled) {
+        card.classList.add('clickable');
+        card.title = '点击交换到此英雄（交换后将关闭自动选择）';
+        card.addEventListener('click', async () => {
+          await manualSwapHero(champ.id);
+        });
       }
 
       card.innerHTML = `
@@ -190,6 +201,21 @@ function updatePickDashboard(data) {
     `;
   } else {
     currentHold.style.display = 'none';
+  }
+}
+
+// ===== 手动交换英雄 =====
+async function manualSwapHero(heroId) {
+  if (!heroId) return;
+
+  // 立即关闭自动选择开关（UI 反馈）
+  if (isSwitchActive(aramPickBtn)) {
+    setSwitchActive(aramPickBtn, false);
+  }
+
+  const result = await window.electronAPI.manualSwap(heroId);
+  if (!result || !result.success) {
+    addLogEntry({ time: new Date().toLocaleString('zh-CN'), message: '手动交换失败，请重试', type: 'error' });
   }
 }
 
@@ -441,6 +467,17 @@ async function init() {
   if (window.electronAPI.onPickUpdate) {
     window.electronAPI.onPickUpdate((data) => {
       updatePickDashboard(data);
+    });
+  }
+
+  // 自动选择开关同步（主进程手动交换后关闭）
+  if (window.electronAPI.onAutoPickChanged) {
+    window.electronAPI.onAutoPickChanged((enabled) => {
+      if (enabled) {
+        setSwitchActive(aramPickBtn, true);
+      } else {
+        setSwitchActive(aramPickBtn, false);
+      }
     });
   }
 
