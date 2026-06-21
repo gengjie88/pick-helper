@@ -28,10 +28,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('log:new', (_, log) => callback(log));
   },
 
+  // 选角仪表盘事件
+  onPickUpdate: (callback) => {
+    ipcRenderer.on('pick:update', (_, data) => callback(data));
+  },
+
   // 窗口控制
   minimize: () => ipcRenderer.invoke('window:minimize'),
-  close: () => ipcRenderer.invoke('window:close'),
-  navigate: (page) => ipcRenderer.invoke('window:navigate', page)
+  close: () => ipcRenderer.invoke('window:close')
 });
 
 // 渲染进程全局错误捕获，转发到主进程，便于定位问题

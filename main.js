@@ -9,7 +9,6 @@ const Store = require('electron-store');
 if (process.platform === 'win32') {
   try {
     const { execSync } = require('child_process');
-    // 将当前控制台代码页设置为 UTF-8（65001）
     execSync('chcp 65001', { stdio: 'ignore' });
     if (process.stdout && typeof process.stdout.setDefaultEncoding === 'function') {
       process.stdout.setDefaultEncoding('utf8');
@@ -18,6 +17,13 @@ if (process.platform === 'win32') {
     // 忽略任何设置失败的错误
   }
 }
+
+// 修复磁盘缓存权限错误：指定用户数据目录并禁用 GPU 着色器缓存
+try {
+  const userDataPath = path.join(app.getPath('appData'), 'pick-helper');
+  app.setPath('userData', userDataPath);
+} catch (_) {}
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 // 数据存储
 const store = new Store({
@@ -418,6 +424,9 @@ async function mainLoop() {
       if (inAramSelect) {
         inAramSelect = false;
         addLog('[选角] 已离开选角阶段', 'info');
+        if (mainWindow) {
+          mainWindow.webContents.send('pick:update', { inChampSelect: false });
+        }
       }
       return;
     }
@@ -442,12 +451,9 @@ async function mainLoop() {
     }
 
     if (!inAramSelect) {
-      // 进入选角阶段时，尝试获取本地已选英雄并通知渲染进程
-      // 通知渲染进程进入选角（原始实现仅告知是否有已选英雄）
-      // 进入选角阶段（不再向渲染进程发送选角事件）
-
       addLog('[选角] 检测到大乱斗选角阶段', 'success');
       inAramSelect = true;
+      sendPickUpdate(true, session, settings);
     }
 
     // 提取备选池英雄
@@ -459,6 +465,7 @@ async function mainLoop() {
       addLog(`[选角] 备选池刷新: ${benchStr}`, 'info');
       lastBenchStr = benchStr;
       lastSwapTargetId = 0;
+      sendPickUpdate(true, session, settings);
     }
 
     if (!benchIds.length) return;
@@ -477,6 +484,7 @@ async function mainLoop() {
       addLog(`[选角] 当前手持: ${champName}`, 'info');
       lastLocalChampionId = localChampionId;
       lastSwapTargetId = 0;
+      sendPickUpdate(true, session, settings);
     }
 
     // 计算当前手持优先级
@@ -527,7 +535,7 @@ async function mainLoop() {
       if (swapResult) {
         lastSwapTargetId = targetId;
         addLog('[选角] 交换请求已发送', 'success');
-        // 之前发送自动选中事件，现移除自动推送详细信息（保留日志）
+        sendPickUpdate(true, session, settings);
       } else {
         addLog('[选角] 交换请求失败', 'error');
         lastSwapTargetId = targetId;
@@ -543,18 +551,68 @@ function startPolling() {
   addLog('已启动主循环', 'info');
 }
 
+// ========== 选角仪表盘事件推送 ==========
+
+function sendPickUpdate(inChampSelect, session, settings) {
+  if (!mainWindow) return;
+
+  const champData = store.get('championData.champions');
+  const heroIdList = settings.heroPriority || [];
+  const data = {
+    inChampSelect,
+    benchChampions: [],
+    localChampion: null,
+    progress: 0,
+    lastAction: null
+  };
+
+  if (inChampSelect && session) {
+    // 备选池
+    const benchList = session.benchChampions || session.teamBenchChampions || [];
+    data.benchChampions = benchList.map(c => ({
+      id: c.championId,
+      name: (champData[c.championId] && champData[c.championId].name) || ('ID:' + c.championId),
+      image: (champData[c.championId] && champData[c.championId].image) || '',
+      priorityIndex: heroIdList.includes(c.championId) ? heroIdList.indexOf(c.championId) : null
+    }));
+
+    // 当前手持
+    const localCell = session.localPlayerCellId;
+    let localChampionId = null;
+    if (session.myTeam) {
+      const localEntry = session.myTeam.find(e => e.cellId === localCell);
+      if (localEntry) localChampionId = localEntry.championId;
+    }
+    if (localChampionId) {
+      data.localChampion = {
+        id: localChampionId,
+        name: (champData[localChampionId] && champData[localChampionId].name) || ('ID:' + localChampionId),
+        image: (champData[localChampionId] && champData[localChampionId].image) || '',
+        priorityIndex: heroIdList.includes(localChampionId) ? heroIdList.indexOf(localChampionId) : null
+      };
+    }
+
+    // 简易进度（根据选角阶段 actions 数量估算）
+    const actions = session.actions || [];
+    const totalActions = (actions.length || 0) + (benchList.length || 0);
+    data.progress = Math.min(95, totalActions * 8);
+  }
+
+  mainWindow.webContents.send('pick:update', data);
+}
+
 // ========== 窗口创建 ==========
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 580,
-    height: 740,
-    minWidth: 580,
-    minHeight: 740,
+    width: 820,
+    height: 780,
+    minWidth: 820,
+    minHeight: 780,
     resizable: false,
     frame: false,
     transparent: false,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -704,14 +762,6 @@ ipcMain.handle('window:minimize', () => {
 
 ipcMain.handle('window:close', () => {
   mainWindow?.close();
-});
-
-ipcMain.handle('window:navigate', (_, page) => {
-  if (page === 'settings') {
-    mainWindow?.loadFile(path.join(__dirname, 'src/settings.html'));
-  } else {
-    mainWindow?.loadFile(path.join(__dirname, 'src/index.html'));
-  }
 });
 
 // ========== 应用生命周期 ==========

@@ -9,20 +9,34 @@
 <body>
   <!-- 标题栏 -->
   <div class="titlebar">
-    <div class="titlebar-title">PickHelper</div>
-    <div class="titlebar-actions">
-      <button class="titlebar-btn" id="settingsBtn" title="设置">
+    <div class="titlebar-left">
+      <span class="titlebar-title">PickHelper</span>
+    </div>
+    <div class="titlebar-right">
+      <button class="switch-btn" id="autoAcceptBtn" title="自动接受对局">
+        <span class="switch-track">
+          <span class="switch-thumb"></span>
+        </span>
+        <span class="switch-label">自动接受</span>
+      </button>
+      <span class="titlebar-sep">|</span>
+      <span class="status-dot disconnected" id="statusDot"></span>
+      <span class="status-text" id="connectionText">未连接</span>
+      <span class="titlebar-sep">|</span>
+      <span class="titlebar-version" id="dataVersionTop">v-</span>
+      <button class="titlebar-icon-btn" id="refreshBtnTop" title="刷新数据">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
         </svg>
       </button>
-      <button class="titlebar-btn" id="minimizeBtn" title="最小化">
+      <button class="titlebar-icon-btn" id="minimizeBtn" title="最小化">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
       </button>
-      <button class="titlebar-btn close" id="closeBtn" title="关闭">
+      <button class="titlebar-icon-btn close" id="closeBtn" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -32,33 +46,90 @@
   </div>
 
   <!-- 主内容区 -->
-  <div class="content">
-    <!-- 状态卡片 -->
-    <div class="status-card">
-      <div class="status-row">
-        <span class="status-label">客户端状态</span>
-        <span class="status-value disconnected" id="connectionStatus">
-          <span class="status-dot disconnected"></span>
-          未连接
-        </span>
+  <div class="main-content">
+    <!-- ===== 上栏：选角仪表盘 ===== -->
+    <div class="pick-dashboard" id="pickDashboard">
+      <div class="dashboard-header">
+        <div class="dashboard-header-left">
+          <span class="dashboard-title">🎯 选角状态</span>
+          <button class="switch-btn" id="aramPickBtn" title="大乱斗自动选英雄">
+            <span class="switch-track">
+              <span class="switch-thumb"></span>
+            </span>
+            <span class="switch-label">自动选英雄</span>
+          </button>
+        </div>
+        <div class="dashboard-header-right">
+          <span class="phase-badge" id="phaseBadge">待进入游戏</span>
+          <div class="pick-progress" id="pickProgress" style="display:none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="status-row">
-        <span class="status-label">游戏阶段</span>
-        <span class="status-value" id="gamePhase">-</span>
+
+      <!-- 备选池 -->
+      <div class="bench-section">
+        <div class="bench-title">备选池</div>
+        <div class="bench-grid" id="benchGrid">
+          <div class="bench-empty" id="benchEmpty">等待进入选角阶段...</div>
+        </div>
+      </div>
+
+      <!-- 当前手持 -->
+      <div class="current-hold" id="currentHold" style="display:none;">
+        <span class="hold-label">当前手持：</span>
+        <div class="hold-champion" id="holdChampion"></div>
       </div>
     </div>
 
-    <!-- 英雄优先级列表 -->
-    <div class="hero-section">
-      <div class="section-header">
-        <span class="section-title">预选英雄优先级</span>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <select id="presetSelect" style="padding:6px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;"></select>
-            <span class="update-time" id="updateTime">数据更新: -</span>
+    <!-- ===== 下栏：英雄配置 + 运行日志 ===== -->
+    <div class="bottom-panels">
+      <!-- 下栏左：英雄优先级配置 -->
+      <div class="panel panel-left">
+        <div class="panel-header">
+          <span class="panel-title">英雄优先级配置</span>
+        </div>
+
+        <!-- 预设管理 -->
+        <div class="preset-row">
+          <select id="presetManageSelect" class="preset-select"></select>
+          <input type="text" id="presetNameInput" class="preset-input" placeholder="预设名称">
+          <button class="btn btn-sm" id="addPresetBtn">新建</button>
+          <button class="btn btn-sm btn-primary" id="savePresetBtn">保存</button>
+          <button class="btn btn-sm btn-danger" id="delPresetBtn">删除</button>
+        </div>
+
+        <!-- 搜索框 -->
+        <div class="search-box">
+          <div class="search-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
           </div>
+          <input type="text" class="search-input" id="heroSearch" placeholder="搜索英雄添加到优先级列表">
+          <div class="hero-dropdown" id="heroDropdown"></div>
+        </div>
+
+        <!-- 已选英雄优先级列表 -->
+        <div class="selected-heroes" id="selectedHeroes">
+          <div class="empty-state">暂无英雄，请搜索添加</div>
+        </div>
       </div>
-      <div class="hero-list" id="heroList">
-        <div class="empty-state">加载中...</div>
+
+      <!-- 下栏右：运行日志 -->
+      <div class="panel panel-right">
+        <div class="panel-header">
+          <span class="panel-title">运行日志</span>
+        </div>
+        <div class="log-container" id="logContainer">
+          <div class="log-item info">
+            <span class="log-time">--:--:--</span>
+            <span class="log-msg">等待日志...</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
