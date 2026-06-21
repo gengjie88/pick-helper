@@ -10,6 +10,7 @@
     "bump": "npm version patch --no-git-tag-version",
     "bump:minor": "npm version minor --no-git-tag-version",
     "bump:major": "npm version major --no-git-tag-version",
+    "predist": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true,maxRetries:5,retryDelay:500})}catch(e){}\"",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
