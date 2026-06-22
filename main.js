@@ -205,6 +205,38 @@ function lcuRequest(path, method = 'GET', body = null) {
   });
 }
 
+// 通过 PowerShell 或 WMIC 获取进程命令行（兼容家庭版等无 WMIC 的系统）
+function getProcessCommandLine(processName) {
+  return new Promise((resolve) => {
+    // 方法1：PowerShell Get-CimInstance（所有 Windows 版本都支持，包括家庭版）
+    const psCmd = `Get-CimInstance Win32_Process -Filter "Name='${processName}'" | Select-Object -ExpandProperty CommandLine`;
+    exec(psCmd, { shell: 'powershell.exe' }, (psError, psStdout) => {
+      if (!psError && psStdout && psStdout.trim()) {
+        resolve(psStdout.trim());
+        return;
+      }
+
+      // 方法2：备选 PowerShell Get-WmiObject（旧版系统兼容）
+      const wmiCmd = `Get-WmiObject Win32_Process -Filter "Name='${processName}'" | Select-Object -ExpandProperty CommandLine`;
+      exec(wmiCmd, { shell: 'powershell.exe' }, (wmiError, wmiStdout) => {
+        if (!wmiError && wmiStdout && wmiStdout.trim()) {
+          resolve(wmiStdout.trim());
+          return;
+        }
+
+        // 方法3：WMIC 兜底（专业版/企业版等）
+        exec(`wmic process where "name='${processName}'" get CommandLine /format:list`, (wmicError, wmicStdout) => {
+          if (!wmicError && wmicStdout) {
+            resolve(wmicStdout.trim());
+          } else {
+            resolve(null);
+          }
+        });
+      });
+    });
+  });
+}
+
 // 检测 LCU 客户端
 function detectLCU() {
   return new Promise((resolve) => {
@@ -222,24 +254,26 @@ function detectLCU() {
     //     return;
     //   }
     // }
-    exec('wmic process where "name=\'LeagueClientUx.exe\'" get CommandLine /format:list', (error, stdout) => {
-      if (error) {
+    getProcessCommandLine('LeagueClientUx.exe').then((cmdline) => {
+      if (!cmdline) {
         resolve(null);
         return;
       }
 
-      const portMatch = stdout.match(/--app-port=(\d+)/);
-      
-      const tokenMatch = stdout.match(/--remoting-auth-token=([^\s]+)/);
+      const portMatch = cmdline.match(/--app-port=(\d+)/);
+      // 匹配 token：只捕获字母数字、短横线、下划线（排除末尾换行等干扰字符）
+      const tokenMatch = cmdline.match(/--remoting-auth-token=([A-Za-z0-9\-_]+)/);
 
       if (portMatch && tokenMatch) {
         resolve({
           port: portMatch[1],
-          token: tokenMatch[1].trim().slice(0, -1)
+          token: tokenMatch[1]
         });
       } else {
         resolve(null);
       }
+    }).catch(() => {
+      resolve(null);
     });
   });
 }

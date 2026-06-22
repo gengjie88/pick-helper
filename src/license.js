@@ -6,6 +6,46 @@ const { execSync } = require('child_process');
 const SECRET_KEY = crypto.createHash('sha256').update('PickHelper-2024-Secret-Key-@#!gengjie').digest();
 const IV = Buffer.from('PH-IV-16bytesKEY', 'utf8'); // 正好 16 字节 IV
 
+// ========== 跨版本 Windows 系统信息获取（兼容家庭版无 WMIC） ==========
+
+/**
+ * 获取 Windows 系统信息（自动选择可用命令）
+ * @param {string} cimClass - CIM/WMI 类名，如 'Win32_DiskDrive'
+ * @param {string} property - 属性名，如 'SerialNumber'
+ * @param {string} wmicAlias - wmic 别名，如 'diskdrive'
+ * @returns {string}
+ */
+function getWindowsSystemInfo(cimClass, property, wmicAlias) {
+  // 方法1：PowerShell Get-CimInstance（所有 Windows 版本，包括家庭版）
+  try {
+    const result = execSync(
+      `Get-CimInstance ${cimClass} | Select-Object -ExpandProperty ${property}`,
+      { encoding: 'utf8', timeout: 5000, shell: 'powershell.exe' }
+    );
+    if (result && result.trim()) return result.trim();
+  } catch (_) { /* 静默回退 */ }
+
+  // 方法2：PowerShell Get-WmiObject（旧版系统兼容）
+  try {
+    const result = execSync(
+      `Get-WmiObject ${cimClass} | Select-Object -ExpandProperty ${property}`,
+      { encoding: 'utf8', timeout: 5000, shell: 'powershell.exe' }
+    );
+    if (result && result.trim()) return result.trim();
+  } catch (_) { /* 静默回退 */ }
+
+  // 方法3：WMIC 兜底（专业版/企业版）
+  try {
+    const result = execSync(
+      `wmic ${wmicAlias} get ${property.toLowerCase()}`,
+      { encoding: 'utf8', timeout: 5000 }
+    );
+    if (result && result.trim()) return result.trim();
+  } catch (_) { /* 静默回退 */ }
+
+  return '';
+}
+
 // ========== 机器指纹生成 ==========
 function getMachineFingerprint() {
   const parts = [
@@ -17,15 +57,19 @@ function getMachineFingerprint() {
     os.totalmem().toString(),
   ];
 
-  // Windows: 尝试获取主板序列号和卷序列号
+  // Windows: 尝试获取磁盘序列号、主板序列号和 MAC 地址
   if (process.platform === 'win32') {
     try {
-      const diskSerial = execSync('wmic diskdrive get serialnumber', { encoding: 'utf8', timeout: 5000 });
-      parts.push(diskSerial.replace(/\s/g, '').replace('SerialNumber', ''));
+      const diskSerial = getWindowsSystemInfo('Win32_DiskDrive', 'SerialNumber', 'diskdrive');
+      if (diskSerial) {
+        parts.push(diskSerial.replace(/\s/g, '').replace('SerialNumber', '').replace('serialnumber', ''));
+      }
     } catch (_) {}
     try {
-      const biosSerial = execSync('wmic bios get serialnumber', { encoding: 'utf8', timeout: 5000 });
-      parts.push(biosSerial.replace(/\s/g, '').replace('SerialNumber', ''));
+      const biosSerial = getWindowsSystemInfo('Win32_BIOS', 'SerialNumber', 'bios');
+      if (biosSerial) {
+        parts.push(biosSerial.replace(/\s/g, '').replace('SerialNumber', '').replace('serialnumber', ''));
+      }
     } catch (_) {}
     try {
       const macAddresses = [];
