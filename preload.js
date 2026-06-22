@@ -46,7 +46,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 窗口控制
   minimize: () => ipcRenderer.invoke('window:minimize'),
-  close: () => ipcRenderer.invoke('window:close')
+  close: () => ipcRenderer.invoke('window:close'),
+
+  // 许可证激活
+  getMachineCode: () => ipcRenderer.invoke('app:get-machine-code'),
+  activateLicense: (licenseKey) => ipcRenderer.invoke('app:activate-license', licenseKey),
+  activationComplete: () => ipcRenderer.invoke('app:activation-complete')
 });
 
 // 渲染进程全局错误捕获，转发到主进程，便于定位问题

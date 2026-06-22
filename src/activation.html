@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PickHelper - 软件激活</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-app-region: drag;
+    }
+    .container {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 48px 40px;
+      width: 440px;
+      -webkit-app-region: no-drag;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .logo p {
+      font-size: 13px;
+      color: #888;
+      margin-top: 6px;
+    }
+    .icon-lock {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    .section label {
+      display: block;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .machine-code-box {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .machine-code-box code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 16px;
+      letter-spacing: 2px;
+      color: #667eea;
+    }
+    .btn-copy {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: #aaa;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .btn-copy:hover { background: rgba(255,255,255,0.2); color: #fff; }
+    .btn-copy.copied { background: #27ae60; color: #fff; }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 15px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      letter-spacing: 1px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: #667eea;
+    }
+    input[type="text"]::placeholder {
+      color: #555;
+      letter-spacing: 0;
+      font-family: inherit;
+    }
+    .btn-activate {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 4px;
+    }
+    .btn-activate:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    }
+    .btn-activate:active { transform: translateY(0); }
+    .btn-activate:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 16px;
+      display: none;
+    }
+    .alert.show { display: block; }
+    .alert-error {
+      background: rgba(231, 76, 60, 0.2);
+      border: 1px solid rgba(231, 76, 60, 0.3);
+      color: #e74c3c;
+    }
+    .alert-success {
+      background: rgba(39, 174, 96, 0.2);
+      border: 1px solid rgba(39, 174, 96, 0.3);
+      color: #2ecc71;
+    }
+    .alert-info {
+      background: rgba(102, 126, 234, 0.2);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      color: #667eea;
+    }
+    .help-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 20px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .help-text span {
+      color: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <div class="icon-lock">🔐</div>
+      <h1>PickHelper</h1>
+      <p>请激活您的软件许可证</p>
+    </div>
+
+    <div class="section">
+      <label>📟 您的机器码</label>
+      <div class="machine-code-box">
+        <code id="machineCode">加载中...</code>
+        <button class="btn-copy" id="btnCopy" onclick="copyMachineCode()">复制</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <label>🔑 许可证密钥</label>
+      <input type="text" id="licenseKey" placeholder="请输入许可证密钥 XXXX-XXXX-XXXX-XXXX..." maxlength="200">
+    </div>
+
+    <button class="btn-activate" id="btnActivate" onclick="activate()">激活软件</button>
+
+    <div id="alert" class="alert"></div>
+
+    <div class="help-text">
+        Powered by <span>Gengjie</span>. 如有任何问题，请联系douyin Gengjie88627 <span>
+    </div>
+  </div>
+
+  <script src="js/activation.js"></script>
+</body>
+</html>

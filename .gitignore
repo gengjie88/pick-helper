@@ -2,10 +2,29 @@ dist/
 out/
 node_modules/
 
-# Optional: ignore local VS Code settings
-.vscode/
+# 🔐 许可证相关 — 绝对不能提交
+scripts/generate-key.js
+# 注意：src/license.js 包含运行时解密密钥，若仓库公开请修改 SECRET_KEY
+.backup-obfuscated/
+restore-sources.bat
 
-# Optional: OS files
+# Electron 本地存储（含许可证密钥等敏感数据）
+pick-helper/
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+.DS_Store
+
+# 打包临时文件
+*.log
+npm-debug.log*
+builder-debug.yml
+builder-effective-config.yaml

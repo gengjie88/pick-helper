@@ -4,6 +4,7 @@ const https = require('https');
 const fs = require('fs');
 const { exec } = require('child_process');
 const Store = require('electron-store');
+const { getMachineFingerprint, validateLicenseKey } = require('./src/license');
 
 // 在 Windows 下强制设置控制台为 UTF-8，避免输出中文时出现乱码
 if (process.platform === 'win32') {
@@ -48,12 +49,14 @@ const store = new Store({
 });
 
 let mainWindow = null;
+let activationWindow = null;
 let tray = null;
 let lcuAuth = null;
 let pollingTimer = null;
 let gamePhase = '';
 let isConnected = false;
 let logs = [];
+let isActivated = false;
 
 // 日志函数：先对消息进行解码与清洗，确保输出可读
 function sanitizeLogMessage(msg) {
@@ -603,6 +606,34 @@ function sendPickUpdate(inChampSelect, session, settings) {
   mainWindow.webContents.send('pick:update', data);
 }
 
+// ========== 激活窗口 ==========
+
+function createActivationWindow() {
+  activationWindow = new BrowserWindow({
+    width: 500,
+    height: 620,
+    minWidth: 500,
+    minHeight: 620,
+    resizable: false,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#1a1a2e',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+    icon: path.join(__dirname, 'assets/icon.png')
+  });
+
+  activationWindow.loadFile(path.join(__dirname, 'src/activation.html'));
+  activationWindow.setAlwaysOnTop(true);
+
+  activationWindow.on('closed', () => {
+    activationWindow = null;
+  });
+}
+
 // ========== 窗口创建 ==========
 
 function createWindow() {
@@ -821,9 +852,65 @@ ipcMain.handle('window:close', () => {
   mainWindow?.close();
 });
 
+// ========== 许可证激活相关 IPC ==========
+
+ipcMain.handle('app:get-machine-code', () => {
+  return getMachineFingerprint();
+});
+
+ipcMain.handle('app:activate-license', (_, licenseKey) => {
+  const result = validateLicenseKey(licenseKey);
+  if (result.valid) {
+    store.set('license', {
+      key: licenseKey,
+      machineCode: result.machineCode,
+      activatedAt: new Date().toISOString(),
+      expiry: result.expiry
+    });
+    isActivated = true;
+    addLog('[许可证] 软件激活成功', 'success');
+  }
+  return result;
+});
+
+ipcMain.handle('app:activation-complete', () => {
+  // 关闭激活窗口，显示主窗口
+  if (activationWindow) {
+    activationWindow.close();
+    activationWindow = null;
+  }
+  // 启动主界面
+  createWindow();
+  createTray();
+  startPolling();
+  checkDailyUpdate();
+});
+
+// ========== 许可证检查 ==========
+
+function checkLicense() {
+  const license = store.get('license');
+  if (!license || !license.key) {
+    return false;
+  }
+  const result = validateLicenseKey(license.key);
+  if (result.valid) {
+    isActivated = true;
+    return true;
+  }
+  return false;
+}
+
 // ========== 应用生命周期 ==========
 
 app.whenReady().then(async () => {
+  // 检查许可证
+  if (!checkLicense()) {
+    // 未激活，显示激活窗口
+    createActivationWindow();
+    return;
+  }
+
   // 检查英雄数据更新
   await fetchChampionData();
   checkDailyUpdate();
