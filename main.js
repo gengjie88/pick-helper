@@ -394,99 +394,101 @@ async function mainLoop() {
     lastReadyState = readyRes?.state || '';
   }
 
-  // 功能2：大乱斗自动选英雄
-  if (settings.aramPick && settings.heroPriority.length > 0) {
-    phaseCheckCounter++;
-    if (phaseCheckCounter >= 5 || lastPhase === '') {
-      const phaseRes = await lcuRequest('/lol-gameflow/v1/gameflow-phase');
-      const currentPhase = phaseRes || '';
-      phaseCheckCounter = 0;
+  // 功能2：选角仪表盘更新 + 大乱斗自动选英雄
+  // ★ 阶段检测：始终运行（不依赖 aramPick），确保持续推送仪表盘数据
+  phaseCheckCounter++;
+  if (phaseCheckCounter >= 5 || lastPhase === '') {
+    const phaseRes = await lcuRequest('/lol-gameflow/v1/gameflow-phase');
+    const currentPhase = phaseRes || '';
+    phaseCheckCounter = 0;
 
-      if (currentPhase !== lastPhase) {
-        gamePhase = currentPhase;
-        addLog(`[阶段] 当前游戏阶段: ${currentPhase}`, 'info');
-        
-        if (currentPhase === 'EndOfGame' || currentPhase === 'WaitingForStats') {
-          resetSessionState();
-          addLog('[状态] 本局结束，已重置会话状态', 'info');
-        }
-        
-        if (mainWindow) {
-          mainWindow.webContents.send('status:update', { connected: true, phase: currentPhase });
-        }
-        
-        lastPhase = currentPhase;
+    if (currentPhase !== lastPhase) {
+      gamePhase = currentPhase;
+      addLog(`[阶段] 当前游戏阶段: ${currentPhase}`, 'info');
+      
+      if (currentPhase === 'EndOfGame' || currentPhase === 'WaitingForStats') {
+        resetSessionState();
+        addLog('[状态] 本局结束，已重置会话状态', 'info');
+      }
+      
+      if (mainWindow) {
+        mainWindow.webContents.send('status:update', { connected: true, phase: currentPhase });
+      }
+      
+      lastPhase = currentPhase;
+    }
+  }
+
+  // 不在选角阶段，跳过
+  if (lastPhase !== 'ChampSelect') {
+    if (inAramSelect) {
+      inAramSelect = false;
+      addLog('[选角] 已离开选角阶段', 'info');
+      if (mainWindow) {
+        mainWindow.webContents.send('pick:update', { inChampSelect: false });
       }
     }
+    return;
+  }
 
-    // 不在选角阶段，跳过
-    if (lastPhase !== 'ChampSelect') {
-      if (inAramSelect) {
-        inAramSelect = false;
-        addLog('[选角] 已离开选角阶段', 'info');
-        if (mainWindow) {
-          mainWindow.webContents.send('pick:update', { inChampSelect: false });
-        }
-      }
-      return;
+  // 获取选角会话（始终获取，用于仪表盘展示）
+  const session = await lcuRequest('/lol-champ-select/v1/session');
+  if (!session) return;
+
+  // 判断是否是 ARAM
+  let mode = session.gameMode;
+  if (!mode && session.gameConfig) mode = session.gameConfig.gameMode;
+  if (!mode && (session.benchEnabled || (session.benchChampions?.length > 0))) {
+    mode = 'ARAM';
+  }
+
+  if (mode !== 'ARAM') {
+    if (inAramSelect) {
+      inAramSelect = false;
+      addLog('[选角] 当前非大乱斗模式', 'info');
     }
+    return;
+  }
 
-    // 获取选角会话
-    const session = await lcuRequest('/lol-champ-select/v1/session');
-    if (!session) return;
+  if (!inAramSelect) {
+    addLog('[选角] 检测到大乱斗选角阶段', 'success');
+    inAramSelect = true;
+    sendPickUpdate(true, session, settings);
+  }
 
-    // 判断是否是 ARAM
-    let mode = session.gameMode;
-    if (!mode && session.gameConfig) mode = session.gameConfig.gameMode;
-    if (!mode && (session.benchEnabled || (session.benchChampions?.length > 0))) {
-      mode = 'ARAM';
-    }
+  // 提取备选池英雄
+  const benchList = session.benchChampions || session.teamBenchChampions || [];
+  const benchIds = benchList.map(c => c.championId);
+  const benchStr = benchIds.join(',');
 
-    if (mode !== 'ARAM') {
-      if (inAramSelect) {
-        inAramSelect = false;
-        addLog('[选角] 当前非大乱斗模式', 'info');
-      }
-      return;
-    }
+  if (benchStr !== lastBenchStr && benchStr) {
+    addLog(`[选角] 备选池刷新: ${benchStr}`, 'info');
+    lastBenchStr = benchStr;
+    lastSwapTargetId = 0;
+    sendPickUpdate(true, session, settings);
+  }
 
-    if (!inAramSelect) {
-      addLog('[选角] 检测到大乱斗选角阶段', 'success');
-      inAramSelect = true;
-      sendPickUpdate(true, session, settings);
-    }
+  if (!benchIds.length) return;
 
-    // 提取备选池英雄
-    const benchList = session.benchChampions || session.teamBenchChampions || [];
-    const benchIds = benchList.map(c => c.championId);
-    const benchStr = benchIds.join(',');
+  // 获取当前手持英雄
+  const localCell = session.localPlayerCellId;
+  let localChampionId = null;
+  if (session.myTeam) {
+    const localEntry = session.myTeam.find(e => e.cellId === localCell);
+    if (localEntry) localChampionId = localEntry.championId;
+  }
 
-    if (benchStr !== lastBenchStr && benchStr) {
-      addLog(`[选角] 备选池刷新: ${benchStr}`, 'info');
-      lastBenchStr = benchStr;
-      lastSwapTargetId = 0;
-      sendPickUpdate(true, session, settings);
-    }
+  if (localChampionId !== lastLocalChampionId) {
+    const champData = store.get('championData.champions');
+    const champName = champData[localChampionId]?.name || localChampionId;
+    addLog(`[选角] 当前手持: ${champName}`, 'info');
+    lastLocalChampionId = localChampionId;
+    lastSwapTargetId = 0;
+    sendPickUpdate(true, session, settings);
+  }
 
-    if (!benchIds.length) return;
-
-    // 获取当前手持英雄
-    const localCell = session.localPlayerCellId;
-    let localChampionId = null;
-    if (session.myTeam) {
-      const localEntry = session.myTeam.find(e => e.cellId === localCell);
-      if (localEntry) localChampionId = localEntry.championId;
-    }
-
-    if (localChampionId !== lastLocalChampionId) {
-      const champData = store.get('championData.champions');
-      const champName = champData[localChampionId]?.name || localChampionId;
-      addLog(`[选角] 当前手持: ${champName}`, 'info');
-      lastLocalChampionId = localChampionId;
-      lastSwapTargetId = 0;
-      sendPickUpdate(true, session, settings);
-    }
-
+  // ★ 自动交换逻辑：仅在 aramPick 开启时执行
+  if (settings.aramPick && settings.heroPriority && settings.heroPriority.length > 0) {
     // 计算当前手持优先级
     const heroIdList = settings.heroPriority;
     let currentIndex = 999;
@@ -781,6 +783,20 @@ ipcMain.handle('app:manual-swap', async (_, heroId) => {
     const champData = store.get('championData.champions');
     const champName = (champData[heroId] && champData[heroId].name) || heroId;
     addLog(`[手动] 交换英雄: ${champName}`, 'success');
+
+    // ★ 主动刷新仪表盘，避免等待下一次轮询
+    try {
+      const session = await lcuRequest('/lol-champ-select/v1/session');
+      if (session && mainWindow) {
+        // 强制重置手持 ID 缓存，确保 sendPickUpdate 会更新手持显示
+        lastLocalChampionId = -999;
+        const s = store.get('settings');
+        sendPickUpdate(true, session, s);
+      }
+    } catch (e) {
+      // 刷新失败不影响主流程
+    }
+
     return { success: true };
   } else {
     addLog('[手动] 交换请求失败', 'error');
