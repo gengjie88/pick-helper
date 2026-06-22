@@ -1,8 +1,16 @@
-// 激活页面逻辑
+﻿// 激活页面逻辑
 let currentMachineCode = '';
 
 // 页面加载时获取机器码
 window.addEventListener('DOMContentLoaded', async () => {
+  // 显示版本号
+  try {
+    const version = await window.electronAPI.getAppVersion();
+    if (version) {
+      document.getElementById('versionBadge').textContent = 'v' + version;
+    }
+  } catch (e) {}
+
   try {
     currentMachineCode = await window.electronAPI.getMachineCode();
     document.getElementById('machineCode').textContent = currentMachineCode || '获取失败';

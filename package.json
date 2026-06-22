@@ -11,8 +11,8 @@
     "bump:minor": "npm version minor --no-git-tag-version",
     "bump:major": "npm version major --no-git-tag-version",
     "obfuscate": "node scripts/obfuscate.js",
-    "pack": "npm run obfuscate && electron-forge package",
-    "dist": "npm run obfuscate && electron-forge make",
+    "pack": "electron-forge package",
+    "dist": "electron-forge make",
     "generate-key": "node scripts/generate-key.js"
   },
   "keywords": [

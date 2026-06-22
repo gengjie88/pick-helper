@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
@@ -47,6 +47,8 @@ const store = new Store({
     }
   }
 });
+
+const appVersion = app.getVersion();
 
 let mainWindow = null;
 let activationWindow = null;
@@ -618,6 +620,7 @@ function createActivationWindow() {
     frame: false,
     transparent: false,
     backgroundColor: '#1a1a2e',
+    title: `PickHelper v${appVersion}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -646,6 +649,7 @@ function createWindow() {
     frame: false,
     transparent: false,
     backgroundColor: '#f0f2f5',
+    title: `PickHelper v${appVersion}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -687,7 +691,7 @@ function createTray() {
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]);
-  tray.setToolTip('PickHelper - LOL 辅助工具');
+  tray.setToolTip(`PickHelper v${appVersion} - LOL 辅助工具`);
   tray.setContextMenu(contextMenu);
   tray.on('click', () => {
     if (mainWindow?.isVisible()) {
@@ -707,6 +711,10 @@ ipcMain.handle('app:get-status', () => {
     championVersion: store.get('championData.version'),
     lastUpdate: store.get('championData.lastUpdate')
   };
+});
+
+ipcMain.handle('app:get-app-version', () => {
+  return appVersion;
 });
 
 ipcMain.handle('app:get-settings', () => {

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+﻿const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // 状态相关
@@ -51,7 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 许可证激活
   getMachineCode: () => ipcRenderer.invoke('app:get-machine-code'),
   activateLicense: (licenseKey) => ipcRenderer.invoke('app:activate-license', licenseKey),
-  activationComplete: () => ipcRenderer.invoke('app:activation-complete')
+  activationComplete: () => ipcRenderer.invoke('app:activation-complete'),
+  getAppVersion: () => ipcRenderer.invoke('app:get-app-version')
 });
 
 // 渲染进程全局错误捕获，转发到主进程，便于定位问题

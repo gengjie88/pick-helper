@@ -1,4 +1,4 @@
-// 设置页面渲染进程
+﻿// 设置页面渲染进程
 
 // DOM 元素
 const backBtn = document.getElementById('backBtn');
@@ -297,6 +297,13 @@ async function updateDataVersion() {
 
 // 初始化
 async function init() {
+  // 显示应用版本
+  try {
+    const v = await window.electronAPI.getAppVersion();
+    const tag = document.getElementById('appVersionTagSettings');
+    if (v && tag) tag.textContent = 'v' + v;
+  } catch (_) {}
+
   // 获取设置
   currentSettings = await window.electronAPI.getSettings();
   heroPriority = [...(currentSettings.heroPriority || [])];

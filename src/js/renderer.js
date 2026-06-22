@@ -1,4 +1,4 @@
-// 主页面渲染进程（单页整合版）
+﻿// 主页面渲染进程（单页整合版）
 
 // ===== 游戏阶段中文映射 =====
 const phaseMap = {
@@ -21,6 +21,7 @@ const autoAcceptBtn = document.getElementById('autoAcceptBtn');
 const statusDot = document.getElementById('statusDot');
 const connectionText = document.getElementById('connectionText');
 const dataVersionTop = document.getElementById('dataVersionTop');
+const appVersionTag = document.getElementById('appVersionTag');
 const refreshBtnTop = document.getElementById('refreshBtnTop');
 const minimizeBtn = document.getElementById('minimizeBtn');
 const closeBtn = document.getElementById('closeBtn');
@@ -401,6 +402,12 @@ async function updateDataVersion() {
 
 // ===== 初始化 =====
 async function init() {
+  // 显示应用版本
+  try {
+    const v = await window.electronAPI.getAppVersion();
+    if (v && appVersionTag) appVersionTag.textContent = 'v' + v;
+  } catch (_) {}
+
   // 设置
   currentSettings = await window.electronAPI.getSettings();
   heroPriority = [...(currentSettings.heroPriority || [])];
