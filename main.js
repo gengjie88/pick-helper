@@ -205,6 +205,11 @@ function lcuRequest(path, method = 'GET', body = null) {
   });
 }
 
+// 延迟工具函数
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // 通过 PowerShell 或 WMIC 获取进程命令行（兼容家庭版等无 WMIC 的系统）
 function getProcessCommandLine(processName) {
   return new Promise((resolve) => {
@@ -562,25 +567,58 @@ async function mainLoop() {
       lastTargetId = targetId;
     }
 
-    // 执行交换
+    // 执行交换（带验证重试）
     if (bestIndex < currentIndex && lastSwapTargetId !== targetId) {
       const champData = store.get('championData.champions');
       const champName = champData[targetId]?.name || targetId;
       addLog(`[选角] 执行交换: ${champName}`, 'success');
 
-      const swapResult = await lcuRequest(
-        `/lol-champ-select/v1/session/bench/swap/${targetId}`,
-        'POST'
-      );
+      const maxRetries = 3;
+      let swapSuccess = false;
 
-      if (swapResult) {
-        lastSwapTargetId = targetId;
-        addLog('[选角] 交换请求已发送', 'success');
-        sendPickUpdate(true, session, settings);
-      } else {
-        addLog('[选角] 交换请求失败', 'error');
-        lastSwapTargetId = targetId;
+      for (let retry = 0; retry < maxRetries; retry++) {
+        const swapResult = await lcuRequest(
+          `/lol-champ-select/v1/session/bench/swap/${targetId}`,
+          'POST'
+        );
+
+        if (!swapResult) {
+          addLog(`[选角] 交换请求失败 (第${retry + 1}次)`, 'error');
+          if (retry < maxRetries - 1) {
+            await sleep(300);
+          }
+          continue;
+        }
+
+        // 等待 LCU 处理交换
+        await sleep(350);
+
+        // 验证是否真的换到了目标英雄
+        const verifySession = await lcuRequest('/lol-champ-select/v1/session');
+        if (verifySession && verifySession.myTeam) {
+          const vLocalCell = verifySession.localPlayerCellId;
+          const vLocalEntry = verifySession.myTeam.find(e => e.cellId === vLocalCell);
+          if (vLocalEntry && vLocalEntry.championId === targetId) {
+            swapSuccess = true;
+            addLog(`[选角] 交换成功: ${champName} (第${retry + 1}次尝试)`, 'success');
+            // 更新缓存
+            lastLocalChampionId = targetId;
+            sendPickUpdate(true, verifySession, settings);
+            break;
+          } else {
+            const heldName = vLocalEntry?.championId
+              ? (champData[vLocalEntry.championId]?.name || vLocalEntry.championId)
+              : '未知';
+            addLog(`[选角] 交换未生效，当前手持: ${heldName} (第${retry + 1}次)`, 'warning');
+          }
+        }
       }
+
+      if (!swapSuccess) {
+        addLog(`[选角] 交换最终失败: ${champName}，已重试${maxRetries}次`, 'error');
+      }
+
+      lastSwapTargetId = targetId;
     }
   }
 }
@@ -846,35 +884,58 @@ ipcMain.handle('app:manual-swap', async (_, heroId) => {
     mainWindow.webContents.send('auto-pick:changed', false);
   }
 
-  // 再执行交换（此时自动选择已关闭，mainLoop 不会干扰）
-  const swapResult = await lcuRequest(
-    `/lol-champ-select/v1/session/bench/swap/${heroId}`,
-    'POST'
-  );
+  // 再执行交换（此时自动选择已关闭，mainLoop 不会干扰），带验证重试
+  const maxRetries = 3;
+  let swapSuccess = false;
 
-  if (swapResult) {
-    const champData = store.get('championData.champions');
-    const champName = (champData[heroId] && champData[heroId].name) || heroId;
-    addLog(`[手动] 交换英雄: ${champName}`, 'success');
+  for (let retry = 0; retry < maxRetries; retry++) {
+    const swapResult = await lcuRequest(
+      `/lol-champ-select/v1/session/bench/swap/${heroId}`,
+      'POST'
+    );
 
-    // ★ 主动刷新仪表盘，避免等待下一次轮询
-    try {
-      const session = await lcuRequest('/lol-champ-select/v1/session');
-      if (session && mainWindow) {
-        // 强制重置手持 ID 缓存，确保 sendPickUpdate 会更新手持显示
-        lastLocalChampionId = -999;
-        const s = store.get('settings');
-        sendPickUpdate(true, session, s);
+    if (!swapResult) {
+      addLog(`[手动] 交换请求失败 (第${retry + 1}次)`, 'error');
+      if (retry < maxRetries - 1) {
+        await sleep(300);
       }
-    } catch (e) {
-      // 刷新失败不影响主流程
+      continue;
     }
 
-    return { success: true };
-  } else {
-    addLog('[手动] 交换请求失败', 'error');
-    return { success: false, error: '交换请求失败' };
+    // 等待 LCU 处理交换
+    await sleep(350);
+
+    // 验证是否真的换到了目标英雄
+    const verifySession = await lcuRequest('/lol-champ-select/v1/session');
+    if (verifySession && verifySession.myTeam) {
+      const vLocalCell = verifySession.localPlayerCellId;
+      const vLocalEntry = verifySession.myTeam.find(e => e.cellId === vLocalCell);
+      if (vLocalEntry && vLocalEntry.championId === heroId) {
+        swapSuccess = true;
+        const champData = store.get('championData.champions');
+        const champName = (champData[heroId] && champData[heroId].name) || heroId;
+        addLog(`[手动] 交换成功: ${champName} (第${retry + 1}次尝试)`, 'success');
+
+        // 强制重置手持 ID 缓存，确保 sendPickUpdate 会更新手持显示
+        lastLocalChampionId = heroId;
+        const s = store.get('settings');
+        sendPickUpdate(true, verifySession, s);
+        break;
+      } else {
+        const heldId = vLocalEntry?.championId;
+        const champData = store.get('championData.champions');
+        const heldName = heldId ? (champData[heldId]?.name || heldId) : '未知';
+        addLog(`[手动] 交换未生效，当前手持: ${heldName} (第${retry + 1}次)`, 'warning');
+      }
+    }
   }
+
+  if (!swapSuccess) {
+    addLog(`[手动] 交换最终失败，已重试${maxRetries}次`, 'error');
+    return { success: false, error: `交换失败，已重试${maxRetries}次` };
+  }
+
+  return { success: true };
 });
 
 // 设置自动选英雄开关
