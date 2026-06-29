@@ -23,7 +23,7 @@ if (process.platform === 'win32') {
 try {
   const userDataPath = path.join(app.getPath('appData'), 'pick-helper');
   app.setPath('userData', userDataPath);
-} catch (_) {}
+} catch (_) { }
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 // 数据存储
@@ -32,12 +32,12 @@ const store = new Store({
     settings: {
       autoAccept: true,
       aramPick: true,
-        heroPriority: [22,48,30,21,27,17,145,42,86,36,202], // 默认几个英雄
-        // 预设分组（可存多个配置组），selectedPreset 保存当前正在使用的预设 id
-        presets: [
-          { id: 'default', name: '默认', heroPriority: [22,48,30,21,27,17,145,42,86,36,202] }
-        ],
-        selectedPreset: 'default',
+      heroPriority: [22, 48, 30, 21, 27, 17, 145, 42, 86, 36, 202], // 默认几个英雄
+      // 预设分组（可存多个配置组），selectedPreset 保存当前正在使用的预设 id
+      presets: [
+        { id: 'default', name: '默认', heroPriority: [22, 48, 30, 21, 27, 17, 145, 42, 86, 36, 202] }
+      ],
+      selectedPreset: 'default',
       pollingInterval: 500
     },
     championData: {
@@ -113,7 +113,7 @@ function sanitizeLogMessage(msg) {
             const gbk = iconv.decode(nodeBuf, 'gbk');
             return stripAnsi(stripControl(gbk));
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       return decoded;
@@ -357,7 +357,7 @@ async function fetchChampionData() {
 function checkDailyUpdate() {
   const lastUpdate = store.get('championData.lastUpdate');
   const today = new Date().toDateString();
-  
+
   if (lastUpdate !== today) {
     addLog('开始检查英雄数据更新...', 'info');
     fetchChampionData();
@@ -393,7 +393,7 @@ async function mainLoop() {
 
   // 检测客户端连接
   const auth = await detectLCU();
-  
+
   if (!auth) {
     if (isConnected) {
       isConnected = false;
@@ -449,16 +449,21 @@ async function mainLoop() {
     if (currentPhase !== lastPhase) {
       gamePhase = currentPhase;
       addLog(`[阶段] 当前游戏阶段: ${currentPhase}`, 'info');
-      
+
       if (currentPhase === 'EndOfGame' || currentPhase === 'WaitingForStats') {
+        const s = store.get('settings');
+        s.aramPick = true; // 自动恢复 aramPick 开启状态
+        if (mainWindow) {
+          mainWindow.webContents.send('auto-pick:changed', true);
+        }
         resetSessionState();
         addLog('[状态] 本局结束，已重置会话状态', 'info');
       }
-      
+
       if (mainWindow) {
         mainWindow.webContents.send('status:update', { connected: true, phase: currentPhase });
       }
-      
+
       lastPhase = currentPhase;
     }
   }
@@ -813,7 +818,7 @@ ipcMain.handle('app:set-selected-preset', (_, id) => {
     if (mainWindow) {
       mainWindow.webContents.send('presets:updated', { presets: s.presets || [], selectedPreset: s.selectedPreset });
     }
-  } catch (e) {}
+  } catch (e) { }
   return true;
 });
 
@@ -826,7 +831,7 @@ ipcMain.handle('app:save-presets', (_, presets) => {
     if (mainWindow) {
       mainWindow.webContents.send('presets:updated', { presets: s.presets || [], selectedPreset: s.selectedPreset });
     }
-  } catch (e) {}
+  } catch (e) { }
   return true;
 });
 
