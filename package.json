@@ -1,6 +1,6 @@
 {
   "name": "pick-helper",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "英雄联盟客户端辅助工具 - 自动接受对局 + 大乱斗自动选英雄",
   "main": "main.js",
   "scripts": {

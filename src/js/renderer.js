@@ -2,8 +2,8 @@
 
 // ===== 游戏阶段中文映射 =====
 const phaseMap = {
-  'None': '无',
-  'Lobby': '大厅',
+  'None': '大厅',
+  'Lobby': '房间',
   'Matchmaking': '匹配中',
   'ReadyCheck': '接受对局',
   'ChampSelect': '选角中',
@@ -145,7 +145,6 @@ function updatePickDashboard(data) {
   // 备选池
   if (benchChampions && benchChampions.length > 0) {
     benchGrid.innerHTML = '';
-    const isAutoEnabled = isSwitchActive(aramPickBtn);
 
     benchChampions.forEach(champ => {
       const card = document.createElement('div');
@@ -158,14 +157,12 @@ function updatePickDashboard(data) {
         }
       }
 
-      // 手动选择：仅自动模式开启时可点击
-      if (isAutoEnabled) {
-        card.classList.add('clickable');
-        card.title = '点击交换到此英雄（交换后将关闭自动选择）';
-        card.addEventListener('click', async () => {
-          await manualSwapHero(champ.id);
-        });
-      }
+      // 手动选择：始终可点击，点击即交换
+      card.classList.add('clickable');
+      card.title = '点击交换到此英雄';
+      card.addEventListener('click', async () => {
+        await manualSwapHero(champ.id);
+      });
 
       card.innerHTML = `
         <img class="bench-card-avatar" src="${champ.image || ''}" alt="${champ.name}" 
