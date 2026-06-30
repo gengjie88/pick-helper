@@ -47,6 +47,9 @@ const heroSearch = document.getElementById('heroSearch');
 const heroDropdown = document.getElementById('heroDropdown');
 const selectedHeroes = document.getElementById('selectedHeroes');
 
+// 图表
+const ahChartDom = document.getElementById('ahChart');
+
 // 日志
 const logContainer = document.getElementById('logContainer');
 
@@ -397,7 +400,137 @@ async function updateDataVersion() {
   }
 }
 
-// ===== 初始化 =====
+// ===== 技能急速换算图表 =====
+function initAhChart() {
+  if (!ahChartDom || typeof echarts === 'undefined') return;
+
+  // 生成曲线数据：AH 0~500
+  const data = [];
+  for (let ah = 0; ah <= 500; ah += 2) {
+    const cdr = (ah / (100 + ah)) * 100;
+    data.push([ah, +cdr.toFixed(2)]);
+  }
+
+  // 标注点
+  const markPoints = [
+    { name: '40%≈66.7AH', coord: [66.7, 40], symbolOffset: [0, -12] },
+    { name: '50%=100AH',  coord: [100, 50], symbolOffset: [0, -12] },
+    { name: '66.7%=200AH', coord: [200, 66.7], symbolOffset: [0, -12] },
+    { name: '83.3%=500AH', coord: [500, 83.3], symbolOffset: [0, -12] },
+  ];
+
+  const chart = echarts.init(ahChartDom);
+
+  const option = {
+    grid: {
+      left: 48,
+      right: 24,
+      top: 18,
+      bottom: 36,
+    },
+    xAxis: {
+      type: 'value',
+      name: '技能急速 (AH)',
+      nameLocation: 'center',
+      nameGap: 28,
+      nameTextStyle: { fontSize: 11, color: '#64748b' },
+      min: 0,
+      max: 500,
+      interval: 100,
+      axisLabel: { fontSize: 10, color: '#94a3b8' },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+    },
+    yAxis: {
+      type: 'value',
+      name: '等效冷却缩减 (%)',
+      nameLocation: 'center',
+      nameGap: 34,
+      nameTextStyle: { fontSize: 11, color: '#64748b' },
+      min: 0,
+      max: 85,
+      interval: 20,
+      axisLabel: {
+        fontSize: 10,
+        color: '#94a3b8',
+        formatter: '{value}',
+      },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+    },
+    series: [
+      {
+        type: 'line',
+        data: data,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+            { offset: 0, color: '#3b82f6' },
+            { offset: 1, color: '#8b5cf6' },
+          ]),
+          width: 2.5,
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(59,130,246,0.12)' },
+            { offset: 1, color: 'rgba(139,92,246,0.02)' },
+          ]),
+        },
+        markPoint: {
+          data: markPoints,
+          symbol: 'pin',
+          symbolSize: 36,
+          itemStyle: {
+            color: '#f59e0b',
+            borderColor: '#fff',
+            borderWidth: 2,
+            shadowBlur: 6,
+            shadowColor: 'rgba(0,0,0,0.15)',
+          },
+          label: {
+            show: true,
+            fontSize: 9,
+            color: '#1e293b',
+            fontWeight: 600,
+            formatter: '{b}',
+          },
+        },
+      },
+    ],
+    tooltip: {
+      trigger: 'axis',
+      formatter: function (params) {
+        const p = params[0];
+        if (p && p.data) {
+          return `技能急速：<b>${p.data[0]}</b><br/>等效冷却缩减：<b>${p.data[1]}%</b>`;
+        }
+        return '';
+      },
+      backgroundColor: '#fff',
+      borderColor: '#e2e8f0',
+      textStyle: { color: '#1e293b', fontSize: 11 },
+      extraCssText: 'border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.08);',
+    },
+  };
+
+  chart.setOption(option);
+
+  // 响应窗口大小变化
+  window.addEventListener('resize', () => {
+    chart.resize();
+  });
+
+  // 面板大小变化时也调整图表（简单用 MutationObserver 监听）
+  if (ahChartDom.parentElement) {
+    const observer = new ResizeObserver(() => {
+      chart.resize();
+    });
+    observer.observe(ahChartDom.parentElement);
+  }
+}
 async function init() {
   // 显示应用版本
   try {
@@ -456,6 +589,9 @@ async function init() {
     const logs = await window.electronAPI.getLogs();
     renderLogs(logs);
   } catch (_) {}
+
+  // 技能急速换算图表
+  initAhChart();
 
   // ===== 事件监听 =====
   window.electronAPI.onStatusUpdate((data) => {

@@ -120,8 +120,12 @@
         </div>
       </div>
 
-      <!-- 下栏右：运行日志 -->
+      <!-- 下栏右：技能急速换算图表 + 运行日志 -->
       <div class="panel panel-right">
+        <div class="panel-header">
+          <span class="panel-title">技能急速换算</span>
+        </div>
+        <div class="chart-container" id="ahChart"></div>
         <div class="panel-header">
           <span class="panel-title">运行日志</span>
         </div>
@@ -135,6 +139,7 @@
     </div>
   </div>
 
+  <script src="lib/echarts.min.js"></script>
   <script src="js/renderer.js"></script>
 </body>
 </html>
