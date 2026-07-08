@@ -213,6 +213,12 @@ function lcuRequest(path, method = 'GET', body = null) {
 
     req.on('error', () => resolve(null));
 
+    // 超时保护：LCU 无响应时 5 秒后释放，防止 mainLoop 永久卡死
+    req.setTimeout(5000, () => {
+      req.destroy();
+      resolve(null);
+    });
+
     if (body) {
       req.write(JSON.stringify(body));
     }
@@ -302,16 +308,18 @@ function detectLCU() {
 
 async function fetchChampionData() {
   try {
-    // 获取最新版本
+    // 获取最新版本（10 秒超时）
     const versions = await new Promise((resolve, reject) => {
-      https.get('https://ddragon.leagueoflegends.com/api/versions.json', (res) => {
+      const req = https.get('https://ddragon.leagueoflegends.com/api/versions.json', (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
           try { resolve(JSON.parse(data)); }
           catch (e) { reject(e); }
         });
-      }).on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(10000, () => { req.destroy(); reject(new Error('请求超时')); });
     });
 
     if (!versions || versions.length === 0) return false;
@@ -327,17 +335,19 @@ async function fetchChampionData() {
       return true;
     }
 
-    // 获取英雄数据
+    // 获取英雄数据（10 秒超时）
     const url = `https://ddragon.leagueoflegends.com/cdn/${latestVersion}/data/zh_CN/champion.json`;
     const championData = await new Promise((resolve, reject) => {
-      https.get(url, (res) => {
+      const req = https.get(url, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
           try { resolve(JSON.parse(data)); }
           catch (e) { reject(e); }
         });
-      }).on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(10000, () => { req.destroy(); reject(new Error('请求超时')); });
     });
 
     // 转换为 ID -> 名称 的映射
@@ -881,7 +891,15 @@ ipcMain.handle('app:save-presets', (_, presets) => {
 });
 
 ipcMain.handle('app:save-settings', (_, settings) => {
-  store.set('settings', settings);
+  // 合并保存：渲染进程可能不含 presets 等字段，用当前 store 值兜底
+  const current = store.get('settings');
+  store.set('settings', {
+    ...current,
+    ...settings,
+    presets: current.presets,
+    selectedPreset: current.selectedPreset,
+    pollingInterval: current.pollingInterval
+  });
   addLog('设置已保存', 'success');
   return true;
 });
