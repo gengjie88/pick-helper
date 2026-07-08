@@ -183,7 +183,22 @@ function lcuRequest(path, method = 'GET', body = null) {
         try {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             if (method !== 'GET') {
-              resolve(true);
+              // POST/PUT 等也解析响应体，方便调用方检查 LCU 级错误
+              if (data) {
+                try {
+                  const parsed = JSON.parse(data);
+                  // LCU 有时返回 { errorCode, message } 但状态码仍为 2xx
+                  if (parsed && parsed.errorCode) {
+                    resolve(null);
+                    return;
+                  }
+                  resolve(parsed);
+                } catch (_) {
+                  resolve(true);
+                }
+              } else {
+                resolve(true);
+              }
             } else {
               resolve(data ? JSON.parse(data) : null);
             }
@@ -373,8 +388,10 @@ let lastPickedId = 0;
 let lastLocalChampionId = -999;
 let lastTargetId = 0;
 let lastSwapTargetId = 0;
+let swapFailCount = 0;       // 连续交换失败计数，用于退避
 let phaseCheckCounter = 0;
 let lastPhase = '';
+let mainLoopRunning = false; // 互斥锁，防止 mainLoop 重叠执行
 
 function resetSessionState() {
   lastReadyState = '';
@@ -384,11 +401,28 @@ function resetSessionState() {
   lastLocalChampionId = -999;
   lastTargetId = 0;
   lastSwapTargetId = 0;
+  swapFailCount = 0;
   phaseCheckCounter = 0;
   lastPhase = '';
 }
 
 async function mainLoop() {
+  // 互斥锁：防止上一次 mainLoop 尚未完成时再次进入（setInterval 不等待 async 完成）
+  if (mainLoopRunning) {
+    return;
+  }
+  mainLoopRunning = true;
+
+  try {
+    await mainLoopInner();
+  } catch (e) {
+    addLog(`[主循环] 异常: ${e.message}`, 'error');
+  } finally {
+    mainLoopRunning = false;
+  }
+}
+
+async function mainLoopInner() {
   const settings = store.get('settings');
 
   // 检测客户端连接
@@ -453,6 +487,7 @@ async function mainLoop() {
       if (currentPhase === 'EndOfGame' || currentPhase === 'WaitingForStats') {
         const s = store.get('settings');
         s.aramPick = true; // 自动恢复 aramPick 开启状态
+        store.set('settings', s); // ★ 必须持久化，否则 UI 显示 ON 但 store 仍是 false
         if (mainWindow) {
           mainWindow.webContents.send('auto-pick:changed', true);
         }
@@ -621,9 +656,19 @@ async function mainLoop() {
 
       if (!swapSuccess) {
         addLog(`[选角] 交换最终失败: ${champName}，已重试${maxRetries}次`, 'error');
+        // ★ 修复：失败时不设置 lastSwapTargetId，允许下次轮询重试
+        // 但增加失败计数，连续失败过多时做退避
+        swapFailCount++;
+        if (swapFailCount >= 3) {
+          addLog(`[选角] 连续失败${swapFailCount}次，跳过本轮等待备选池刷新`, 'warning');
+          lastSwapTargetId = targetId; // 连续失败3次后才标记，等备选池变化再重试
+          swapFailCount = 0;
+        }
+      } else {
+        // ★ 修复：仅在成功时标记
+        lastSwapTargetId = targetId;
+        swapFailCount = 0;
       }
-
-      lastSwapTargetId = targetId;
     }
   }
 }

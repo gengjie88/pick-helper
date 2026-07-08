@@ -610,9 +610,10 @@ async function init() {
     });
   }
 
-  // 自动选择开关同步（主进程手动交换后关闭）
+  // 自动选择开关同步（主进程手动交换后关闭 / 对局结束自动恢复）
   if (window.electronAPI.onAutoPickChanged) {
     window.electronAPI.onAutoPickChanged((enabled) => {
+      currentSettings.aramPick = enabled; // ★ 同步内存状态，防止 currentSettings 与实际不一致
       if (enabled) {
         setSwitchActive(aramPickBtn, true);
       } else {
