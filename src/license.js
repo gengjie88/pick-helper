@@ -1,12 +1,18 @@
+/**
+ * 许可证验证模块
+ * 功能：机器指纹生成（硬件绑定）+ AES-256-CBC 许可证密钥解密验证
+ */
 const crypto = require('crypto');
 const os = require('os');
 const { execSync } = require('child_process');
 
-// ========== 密钥配置（发布时请修改此密钥） ==========
+// ========== 加密配置 ==========
+// AES-256-CBC：密钥由密码短语 SHA-256 哈希生成，IV 固定 16 字节
 const SECRET_KEY = crypto.createHash('sha256').update('PickHelper-2024-Secret-Key-@#!gengjie').digest();
-const IV = Buffer.from('PH-IV-16bytesKEY', 'utf8'); // 正好 16 字节 IV
+const IV = Buffer.from('PH-IV-16bytesKEY', 'utf8');
 
-// ========== 跨版本 Windows 系统信息获取（兼容家庭版无 WMIC） ==========
+// ========== 跨版本 Windows 系统信息获取 ==========
+// 兼容家庭版（无 WMIC），逐级回退：CIM → WMI → WMIC
 
 /**
  * 获取 Windows 系统信息（自动选择可用命令）
@@ -46,7 +52,11 @@ function getWindowsSystemInfo(cimClass, property, wmicAlias) {
   return '';
 }
 
-// ========== 机器指纹生成 ==========
+/**
+ * 生成机器唯一指纹（SHA-256 前 16 位）
+ * 采集：主机名 + 用户名 + CPU + 内存 + 磁盘序列号 + BIOS + MAC 地址
+ * @returns {string} 16 位十六进制指纹
+ */
 function getMachineFingerprint() {
   const parts = [
     os.hostname(),
@@ -89,8 +99,11 @@ function getMachineFingerprint() {
   return crypto.createHash('sha256').update(raw).digest('hex').substring(0, 16);
 }
 
-// ========== AES 解密（仅运行时校验需要） ==========
-
+/**
+ * AES-256-CBC 解密
+ * @param {string} encrypted - 十六进制密文
+ * @returns {string} 解密后的明文
+ */
 function decrypt(encrypted) {
   try {
     const decipher = crypto.createDecipheriv('aes-256-cbc', SECRET_KEY, IV);

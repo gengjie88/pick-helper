@@ -1,5 +1,8 @@
-﻿// 主页面渲染进程（单页整合版）
-
+﻿/**
+ * PickHelper 主页面渲染进程
+ * 负责：UI 交互、英雄优先级配置、预设管理、选角仪表盘、日志展示
+ * 通过 window.electronAPI（preload 暴露）与主进程通信
+ */
 // ===== 游戏阶段中文映射 =====
 const phaseMap = {
   'None': '大厅',
@@ -15,8 +18,8 @@ const phaseMap = {
   'Reconnect': '重连中'
 };
 
-// ===== DOM 元素 =====
-// 标题栏
+// ===== DOM 元素引用 =====
+// --- 标题栏 ---
 const autoAcceptBtn = document.getElementById('autoAcceptBtn');
 const statusDot = document.getElementById('statusDot');
 const connectionText = document.getElementById('connectionText');
@@ -53,15 +56,16 @@ const ahChartDom = document.getElementById('ahChart');
 // 日志
 const logContainer = document.getElementById('logContainer');
 
-// ===== 全局数据 =====
-let allChampions = {};
-let heroPriority = [];
-let currentSettings = {};
-let presetsList = [];
-let isCreatingPreset = false;
-let currentPresetId = null;
+// ===== 全局状态 =====
+let allChampions = {};       // ID → {id, name, title, image} 英雄数据缓存
+let heroPriority = [];       // number[] 当前选中的英雄优先级 ID 列表
+let currentSettings = {};    // 当前设置快照（autoAccept/aramPick/heroPriority...）
+let presetsList = [];        // 预设配置组列表
+let isCreatingPreset = false;// 是否正在新建预设
+let currentPresetId = null;  // 当前选中的预设 ID
 
-// ===== 开关按钮 =====
+// ===== 开关按钮工具函数 =====
+/** 设置开关按钮的激活状态（添加/移除 'active' CSS 类） */
 function setSwitchActive(btn, active) {
   if (active) {
     btn.classList.add('active');
@@ -70,10 +74,12 @@ function setSwitchActive(btn, active) {
   }
 }
 
+/** 读取开关按钮当前状态 */
 function isSwitchActive(btn) {
   return btn.classList.contains('active');
 }
 
+// 自动接受对局开关：点击切换 → 保存设置
 autoAcceptBtn.addEventListener('click', () => {
   autoAcceptBtn.classList.toggle('active');
   saveCurrentSettings();
@@ -84,6 +90,7 @@ aramPickBtn.addEventListener('click', () => {
   saveCurrentSettings();
 });
 
+/** 将当前 UI 状态（开关、英雄列表）写回 currentSettings 并发送到主进程持久化 */
 async function saveCurrentSettings() {
   currentSettings.autoAccept = isSwitchActive(autoAcceptBtn);
   currentSettings.aramPick = isSwitchActive(aramPickBtn);
@@ -91,7 +98,8 @@ async function saveCurrentSettings() {
   await window.electronAPI.saveSettings(currentSettings);
 }
 
-// ===== 状态更新 =====
+// ===== 连接状态 UI 更新 =====
+/** 更新标题栏连接状态指示灯 */
 function updateConnectionStatus(connected) {
   if (connected) {
     statusDot.className = 'status-dot connected';
@@ -102,6 +110,7 @@ function updateConnectionStatus(connected) {
   }
 }
 
+/** 更新游戏阶段徽章和选角仪表盘可见性 */
 function updateGamePhase(phase) {
   const display = phase && phaseMap[phase] ? phaseMap[phase] : (phase || '-');
   phaseBadge.textContent = display;
@@ -129,7 +138,8 @@ function updateGamePhase(phase) {
   pickDashboard.dataset.wasActive = (phase === 'ChampSelect') ? '1' : '';
 }
 
-// ===== 仪表盘：选角数据更新 =====
+// ===== 选角仪表盘渲染 =====
+/** 根据主进程推送的 pick:update 数据渲染备选池、手持英雄、进度条 */
 function updatePickDashboard(data) {
   const { inChampSelect, benchChampions, localChampion, progress, lastAction } = data || {};
 
@@ -205,7 +215,11 @@ function updatePickDashboard(data) {
   }
 }
 
-// ===== 手动交换英雄 =====
+// ===== 手动交换 =====
+/**
+ * 用户点击备选池卡片 → 手动交换英雄
+ * 先关闭 UI 开关，再调用主进程执行交换
+ */
 async function manualSwapHero(heroId) {
   if (!heroId) return;
 
@@ -220,7 +234,8 @@ async function manualSwapHero(heroId) {
   }
 }
 
-// ===== 英雄优先级配置 =====
+// ===== 英雄优先级配置 UI =====
+/** 渲染已选英雄列表（支持拖拽排序、点击删除） */
 function renderSelectedHeroes() {
   if (!heroPriority.length) {
     selectedHeroes.innerHTML = '<div class="empty-state">暂无英雄，请搜索添加</div>';
@@ -286,6 +301,7 @@ function renderSelectedHeroes() {
   });
 }
 
+/** 添加英雄到优先级列表末尾 */
 function addHero(id) {
   if (!heroPriority.includes(id)) {
     heroPriority.push(id);
@@ -296,12 +312,14 @@ function addHero(id) {
   heroDropdown.classList.remove('show');
 }
 
+/** 从优先级列表中移除英雄 */
 function removeHero(id) {
   heroPriority = heroPriority.filter(h => h !== id);
   renderSelectedHeroes();
   saveCurrentSettings();
 }
 
+/** 搜索英雄（按名称/称号模糊匹配，最多 10 个结果） */
 function searchHeroes(query) {
   if (!query.trim()) {
     heroDropdown.classList.remove('show');
@@ -331,7 +349,8 @@ function searchHeroes(query) {
   heroDropdown.classList.add('show');
 }
 
-// ===== 预设管理 =====
+// ===== 预设管理 UI =====
+/** 渲染预设下拉选择框 */
 function renderPresetOptions() {
   presetManageSelect.innerHTML = '';
   presetsList.forEach(p => {
@@ -357,7 +376,8 @@ async function syncPresetToMain(id) {
   await window.electronAPI.setSelectedPreset(id);
 }
 
-// ===== 日志 =====
+// ===== 日志渲染 =====
+/** 全量渲染日志列表 */
 function renderLogs(logs) {
   if (!logs || !logs.length) {
     logContainer.innerHTML = '<div class="log-item info"><span class="log-time">--:--:--</span><span class="log-msg">暂无日志</span></div>';
@@ -369,6 +389,7 @@ function renderLogs(logs) {
   }).join('');
 }
 
+/** 追加一条日志到顶部（实时推送） */
 function addLogEntry(log) {
   const time = log.time ? log.time.split(' ')[1] || log.time : '--:--:--';
   const div = document.createElement('div');
@@ -384,7 +405,8 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ===== 数据版本 =====
+// ===== 数据版本显示 =====
+/** 更新标题栏英雄数据版本号 */
 async function updateDataVersion() {
   try {
     const status = await window.electronAPI.getStatus();
@@ -401,6 +423,7 @@ async function updateDataVersion() {
 }
 
 // ===== 技能急速换算图表 =====
+/** 初始化 ECharts 技能急速 ↔ 冷却缩减换算曲线图 */
 function initAhChart() {
   if (!ahChartDom || typeof echarts === 'undefined') return;
 
@@ -531,6 +554,10 @@ function initAhChart() {
     observer.observe(ahChartDom.parentElement);
   }
 }
+/**
+ * 页面初始化入口
+ * 流程：加载设置 → 加载英雄数据 → 加载预设 → 注册事件监听 → 渲染 UI
+ */
 async function init() {
   // 显示应用版本
   try {

@@ -1,9 +1,13 @@
-﻿const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+﻿/**
+ * PickHelper - LOL 大乱斗自动选英雄辅助工具
+ * 主进程入口，负责：LCU API 通信、轮询检测、自动交换、窗口管理、IPC 通信
+ */
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const https = require('https');
+const https = require('https');        // LCU API 和英雄数据请求（自签名证书）
 const fs = require('fs');
-const { exec } = require('child_process');
-const Store = require('electron-store');
+const { exec } = require('child_process'); // 检测 LCU 进程命令行参数
+const Store = require('electron-store');   // JSON 文件持久化配置
 const { getMachineFingerprint, validateLicenseKey } = require('./src/license');
 
 // 在 Windows 下强制设置控制台为 UTF-8，避免输出中文时出现乱码
@@ -26,7 +30,8 @@ try {
 } catch (_) { }
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
-// 数据存储
+// ========== 持久化存储配置 ==========
+// 所有配置保存在用户 AppData 目录下的 config.json
 const store = new Store({
   defaults: {
     settings: {
@@ -48,19 +53,31 @@ const store = new Store({
   }
 });
 
+// ========== 应用全局状态变量 ==========
+
 const appVersion = app.getVersion();
 
-let mainWindow = null;
-let activationWindow = null;
-let tray = null;
-let lcuAuth = null;
-let pollingTimer = null;
-let gamePhase = '';
-let isConnected = false;
-let logs = [];
-let isActivated = false;
+// --- Electron 窗口 ---
+let mainWindow = null;         // BrowserWindow | null - 主窗口
+let activationWindow = null;   // BrowserWindow | null - 激活/许可证窗口
+let tray = null;               // Tray | null - 系统托盘
 
-// 日志函数：先对消息进行解码与清洗，确保输出可读
+// --- LCU 客户端连接 ---
+let lcuAuth = null;            // { port: string, token: string } | null - LCU API 认证信息
+let pollingTimer = null;       // interval ID - 主循环定时器
+let gamePhase = '';            // string - 当前游戏阶段（Lobby/ChampSelect/InProgress...）
+let isConnected = false;       // boolean - LCU 客户端是否已连接
+
+// --- 日志与许可 ---
+let logs = [];                 // 日志数组，最多保留 100 条
+let isActivated = false;       // boolean - 许可证是否已验证通过
+
+/**
+ * 清洗日志消息 - 移除控制字符和 ANSI 转义码，确保可读
+ * 支持 String / Buffer / Uint8Array / ArrayBuffer / Object
+ * @param {*} msg - 原始消息
+ * @returns {string} 可读的纯文本
+ */
 function sanitizeLogMessage(msg) {
   if (!msg && msg !== 0) return '';
   const stripControl = (s) => s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
@@ -134,6 +151,11 @@ function sanitizeLogMessage(msg) {
   }
 }
 
+/**
+ * 添加一条日志，同时输出到控制台和推送至渲染进程
+ * @param {string} message - 日志内容
+ * @param {'info'|'success'|'warning'|'error'} [type='info'] - 日志级别
+ */
 function addLog(message, type = 'info') {
   const safeMessage = sanitizeLogMessage(message);
   const log = {
@@ -151,11 +173,18 @@ function addLog(message, type = 'info') {
   console.log(`[${type}] ${safeMessage}`);
 }
 
-// ========== LCU API 相关 ==========
+// ========== LCU API 通信 ==========
 
-// 忽略自签名证书
+// LCU 使用自签名证书，必须关闭 TLS 证书验证
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
+/**
+ * 向 LCU API 发送请求（本地回环，无需网络）
+ * @param {string} path - API 路径，如 '/lol-gameflow/v1/gameflow-phase'
+ * @param {string} [method='GET'] - HTTP 方法
+ * @param {object} [body=null] - 请求体（仅 POST/PUT）
+ * @returns {Promise<object|boolean|null>} 响应数据，失败返回 null
+ */
 function lcuRequest(path, method = 'GET', body = null) {
   return new Promise((resolve, reject) => {
     if (!lcuAuth) {
@@ -226,12 +255,20 @@ function lcuRequest(path, method = 'GET', body = null) {
   });
 }
 
-// 延迟工具函数
+/**
+ * Promise 版本的延迟函数
+ * @param {number} ms - 毫秒
+ */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 通过 PowerShell 或 WMIC 获取进程命令行（兼容家庭版等无 WMIC 的系统）
+/**
+ * 获取指定进程的命令行参数（用于提取 LCU 端口和 token）
+ * 使用多种方式兜底，兼容不同 Windows 版本
+ * @param {string} processName - 进程名，如 'LeagueClientUx.exe'
+ * @returns {Promise<string|null>} 命令行字符串
+ */
 function getProcessCommandLine(processName) {
   return new Promise((resolve) => {
     // 方法1：PowerShell Get-CimInstance（所有 Windows 版本都支持，包括家庭版）
@@ -263,7 +300,11 @@ function getProcessCommandLine(processName) {
   });
 }
 
-// 检测 LCU 客户端
+/**
+ * 检测 LCU 客户端是否运行，提取 API 端口和认证 token
+ * 通过读取 LeagueClientUx.exe 进程的命令行参数获取
+ * @returns {Promise<{port:string, token:string}|null>}
+ */
 function detectLCU() {
   return new Promise((resolve) => {
     if (process.platform !== 'win32') {
@@ -304,8 +345,13 @@ function detectLCU() {
   });
 }
 
-// ========== 英雄数据相关 ==========
+// ========== 英雄数据管理 ==========
 
+/**
+ * 从 DataDragon CDN 获取最新英雄数据（ID→名称/头像映射）
+ * 每日自动缓存，版本未变且当天已更新则跳过
+ * @returns {Promise<boolean>} 是否成功
+ */
 async function fetchChampionData() {
   try {
     // 获取最新版本（10 秒超时）
@@ -378,7 +424,10 @@ async function fetchChampionData() {
   }
 }
 
-// 每日检查更新
+/**
+ * 每日检查英雄数据是否需要更新（跨天时触发）
+ * 通过 setInterval 每小时检查一次是否跨天
+ */
 function checkDailyUpdate() {
   const lastUpdate = store.get('championData.lastUpdate');
   const today = new Date().toDateString();
@@ -389,20 +438,24 @@ function checkDailyUpdate() {
   }
 }
 
-// ========== 主循环 ==========
+// ========== 主循环状态变量 ==========
+// 这些变量在每局游戏结束后通过 resetSessionState() 重置
 
-let lastReadyState = '';
-let inAramSelect = false;
-let lastBenchStr = '';
-let lastPickedId = 0;
-let lastLocalChampionId = -999;
-let lastTargetId = 0;
-let lastSwapTargetId = 0;
-let swapFailCount = 0;       // 连续交换失败计数，用于退避
-let phaseCheckCounter = 0;
-let lastPhase = '';
-let mainLoopRunning = false; // 互斥锁，防止 mainLoop 重叠执行
+let lastReadyState = '';       // 上次"接受对局"状态，防止重复点击接受
+let inAramSelect = false;      // 当前是否处于大乱斗选角阶段
+let lastBenchStr = '';         // 上次备选池 ID 快照（逗号分隔），用于检测变化
+let lastPickedId = 0;          // 上次"无可用英雄"标记（-1 表示已记录）
+let lastLocalChampionId = -999;// 上次手持英雄 ID，变化时触发日志和 UI 更新
+let lastTargetId = 0;          // 上次日志输出的目标英雄 ID，防止重复日志
+let lastSwapTargetId = 0;      // 上次尝试交换的目标 ID，防止重复交换同一英雄
+let swapFailCount = 0;         // 连续交换失败计数（≥3 时退避，等待备选池刷新）
+let phaseCheckCounter = 0;     // 阶段检测计数器（每 5 次轮询检测一次阶段变化）
+let lastPhase = '';            // 上一次的游戏阶段
+let mainLoopRunning = false;   // 互斥锁，防止 setInterval 导致 mainLoop 重叠执行
 
+/**
+ * 重置所有会话级状态（每局游戏结束后调用）
+ */
 function resetSessionState() {
   lastReadyState = '';
   inAramSelect = false;
@@ -416,6 +469,12 @@ function resetSessionState() {
   lastPhase = '';
 }
 
+/**
+ * 主循环入口（带互斥锁包装）
+ * 由 setInterval 定时调用，间隔由 settings.pollingInterval 决定（默认 500ms）
+ * setInterval 不会等待 async 完成，使用互斥锁防止重叠执行
+ * 异常由 try/catch 兜底，确保锁一定释放
+ */
 async function mainLoop() {
   // 互斥锁：防止上一次 mainLoop 尚未完成时再次进入（setInterval 不等待 async 完成）
   if (mainLoopRunning) {
@@ -432,6 +491,15 @@ async function mainLoop() {
   }
 }
 
+/**
+ * 主循环核心逻辑
+ * 每轮执行流程：
+ *   1. 读取最新 settings（快照）
+ *   2. 检测 LCU 连接状态 → 未连接则返回
+ *   3. 自动接受对局（如开启 autoAccept）
+ *   4. 每 5 次轮询检测一次游戏阶段变化
+ *   5. 若处于 ChampSelect + ARAM → 获取会话 → 执行自动交换决策
+ */
 async function mainLoopInner() {
   const settings = store.get('settings');
 
@@ -472,7 +540,7 @@ async function mainLoopInner() {
     }
   }
 
-  // 功能1：自动接受对局
+  // 功能1：自动接受对局（仅当状态从非 InProgress 变为 InProgress 时触发一次）
   if (settings.autoAccept) {
     const readyRes = await lcuRequest('/lol-matchmaking/v1/ready-check');
     if (readyRes && readyRes.state === 'InProgress' && lastReadyState !== 'InProgress') {
@@ -581,7 +649,11 @@ async function mainLoopInner() {
     sendPickUpdate(true, session, settings);
   }
 
-  // ★ 自动交换逻辑：仅在 aramPick 开启时执行
+  // ★ 自动交换决策算法：
+  //   1. 计算当前手持英雄在 heroPriority 中的排名 (currentIndex)
+  //   2. 遍历 heroPriority 找到备选池中排名最高的英雄 (bestIndex, targetId)
+  //   3. 如果 bestIndex < currentIndex → 备选池有更高优先级英雄 → 执行交换
+  //   4. 交换带 3 次重试 + 验证，防止 LCU 竞态
   if (settings.aramPick && settings.heroPriority && settings.heroPriority.length > 0) {
     // 计算当前手持优先级
     const heroIdList = settings.heroPriority;
@@ -683,6 +755,10 @@ async function mainLoopInner() {
   }
 }
 
+/**
+ * 启动主循环定时器
+ * 清除旧定时器，按 settings.pollingInterval 重新创建
+ */
 function startPolling() {
   if (pollingTimer) clearInterval(pollingTimer);
   const settings = store.get('settings');
@@ -690,8 +766,14 @@ function startPolling() {
   addLog('已启动主循环', 'info');
 }
 
-// ========== 选角仪表盘事件推送 ==========
+// ========== 选角仪表盘数据推送 ==========
 
+/**
+ * 向渲染进程推送选角仪表盘数据（备选池、手持英雄、进度等）
+ * @param {boolean} inChampSelect - 是否处于选角阶段
+ * @param {object} session - LCU 选角会话对象
+ * @param {object} settings - 当前设置快照
+ */
 function sendPickUpdate(inChampSelect, session, settings) {
   if (!mainWindow) return;
 
@@ -740,8 +822,12 @@ function sendPickUpdate(inChampSelect, session, settings) {
   mainWindow.webContents.send('pick:update', data);
 }
 
-// ========== 激活窗口 ==========
+// ========== 激活窗口（许可证验证） ==========
 
+/**
+ * 创建激活/许可证验证窗口
+ * 未激活时显示，激活成功后关闭并启动主窗口
+ */
 function createActivationWindow() {
   activationWindow = new BrowserWindow({
     width: 500,
@@ -769,8 +855,11 @@ function createActivationWindow() {
   });
 }
 
-// ========== 窗口创建 ==========
+// ========== 主窗口 ==========
 
+/**
+ * 创建主窗口（无边框、固定大小、加载 index.html）
+ */
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 820,
@@ -808,6 +897,10 @@ function createWindow() {
   });
 }
 
+/**
+ * 创建系统托盘图标（右键菜单：显示窗口 / 退出）
+ * 点击托盘图标切换窗口显示/隐藏
+ */
 function createTray() {
   const iconPath = path.join(__dirname, 'assets/icon.png');
   let trayIcon;
@@ -834,8 +927,11 @@ function createTray() {
   });
 }
 
-// ========== IPC 通信 ==========
+// ========== IPC 通信（主进程 ←→ 渲染进程） ==========
 
+// --- 状态查询 ---
+
+/** 获取当前连接状态和游戏阶段 */
 ipcMain.handle('app:get-status', () => {
   return {
     connected: isConnected,
@@ -845,19 +941,25 @@ ipcMain.handle('app:get-status', () => {
   };
 });
 
+/** 获取应用版本号 */
 ipcMain.handle('app:get-app-version', () => {
   return appVersion;
 });
 
+// --- 设置相关 ---
+
+/** 获取完整 settings 对象 */
 ipcMain.handle('app:get-settings', () => {
   return store.get('settings');
 });
 
+/** 获取预设列表和当前选中预设 */
 ipcMain.handle('app:get-presets', () => {
   const s = store.get('settings');
   return { presets: s.presets || [], selectedPreset: s.selectedPreset || null };
 });
 
+/** 切换到指定预设（同步 heroPriority 到 settings）并广播 */
 ipcMain.handle('app:set-selected-preset', (_, id) => {
   const s = store.get('settings');
   s.selectedPreset = id;
@@ -877,6 +979,7 @@ ipcMain.handle('app:set-selected-preset', (_, id) => {
   return true;
 });
 
+/** 保存预设列表并广播 */
 ipcMain.handle('app:save-presets', (_, presets) => {
   const s = store.get('settings');
   s.presets = Array.isArray(presets) ? presets : s.presets;
@@ -890,6 +993,10 @@ ipcMain.handle('app:save-presets', (_, presets) => {
   return true;
 });
 
+/** 
+ * 保存设置（合并模式：渲染进程传来的 settings 与当前 store 合并，
+ * presets/selectedPreset/pollingInterval 强制保留主进程值防止被过期快照覆盖）
+ */
 ipcMain.handle('app:save-settings', (_, settings) => {
   // 合并保存：渲染进程可能不含 presets 等字段，用当前 store 值兜底
   const current = store.get('settings');
@@ -904,21 +1011,26 @@ ipcMain.handle('app:save-settings', (_, settings) => {
   return true;
 });
 
+/** 获取缓存的英雄数据映射（ID → {name, image}） */
 ipcMain.handle('app:get-champions', () => {
   return store.get('championData.champions');
 });
 
+/** 获取全部日志（最近 100 条） */
 ipcMain.handle('app:get-logs', () => {
   return logs;
 });
 
-// 接收渲染进程错误并记录
+// --- 错误收集 ---
+
+/** 接收渲染进程未捕获错误 */
 ipcMain.on('renderer:error', (_, info) => {
   const msg = `渲染器错误: ${info.message || ''} ${info.filename ? `at ${info.filename}:${info.lineno || 0}:${info.colno || 0}` : ''}`;
   const detail = info.stack || '';
   addLog(`${msg}\n${detail}`, 'error');
 });
 
+/** 接收渲染进程 console.error 输出 */
 ipcMain.on('renderer:console', (_, args) => {
   try {
     addLog(`渲染器 console.error: ${args.join(' ')}`, 'error');
@@ -927,6 +1039,9 @@ ipcMain.on('renderer:console', (_, args) => {
   }
 });
 
+// --- 英雄数据 ---
+
+/** 手动刷新英雄数据（从 DataDragon CDN 重新拉取） */
 ipcMain.handle('app:refresh-champions', async () => {
   addLog('手动刷新英雄数据...', 'info');
   const result = await fetchChampionData();
@@ -937,7 +1052,13 @@ ipcMain.handle('app:refresh-champions', async () => {
   };
 });
 
-// 手动交换英雄：渲染进程点击备选池卡片触发
+// --- 英雄交换 ---
+
+/**
+ * 手动交换英雄（渲染进程点击备选池卡片触发）
+ * 流程：先关闭 aramPick 防止自动逻辑干扰 → 执行交换 → 验证
+ * @param {number} heroId - 目标英雄 ID
+ */
 ipcMain.handle('app:manual-swap', async (_, heroId) => {
   if (!lcuAuth || !heroId) return { success: false, error: '未连接或参数无效' };
 
@@ -1006,7 +1127,9 @@ ipcMain.handle('app:manual-swap', async (_, heroId) => {
   return { success: true };
 });
 
-// 设置自动选英雄开关
+// --- 开关与窗口控制 ---
+
+/** 设置自动选英雄开关状态 */
 ipcMain.handle('app:set-auto-pick', (_, enabled) => {
   const s = store.get('settings');
   s.aramPick = !!enabled;
@@ -1023,12 +1146,14 @@ ipcMain.handle('window:close', () => {
   mainWindow?.close();
 });
 
-// ========== 许可证激活相关 IPC ==========
+// ========== 许可证激活 ==========
 
+/** 获取本机机器码（用于许可证绑定） */
 ipcMain.handle('app:get-machine-code', () => {
   return getMachineFingerprint();
 });
 
+/** 验证许可证密钥，成功则存储激活信息 */
 ipcMain.handle('app:activate-license', (_, licenseKey) => {
   const result = validateLicenseKey(licenseKey);
   if (result.valid) {
@@ -1044,6 +1169,7 @@ ipcMain.handle('app:activate-license', (_, licenseKey) => {
   return result;
 });
 
+/** 激活完成：关闭激活窗口，启动主界面和轮询 */
 ipcMain.handle('app:activation-complete', () => {
   // 关闭激活窗口，显示主窗口
   if (activationWindow) {
@@ -1059,6 +1185,10 @@ ipcMain.handle('app:activation-complete', () => {
 
 // ========== 许可证检查 ==========
 
+/**
+ * 检查本地存储的许可证是否有效
+ * @returns {boolean} 是否已激活
+ */
 function checkLicense() {
   const license = store.get('license');
   if (!license || !license.key) {
@@ -1075,7 +1205,7 @@ function checkLicense() {
 // ========== 应用生命周期 ==========
 
 app.whenReady().then(async () => {
-  // 检查许可证
+  // 第一步：检查许可证 → 未激活则显示激活窗口
   if (!checkLicense()) {
     // 未激活，显示激活窗口
     createActivationWindow();
